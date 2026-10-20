@@ -1,12 +1,15 @@
 import {
   // convertToWebP,
   // batchConvertToWebP,
+  calculateScaleFactor,
   formatFileSize,
   isSupportedImageFormat,
   filterSupportedImages,
   createWebPDownloadUrl,
   downloadWebP,
   cleanup,
+  scaleDimensions,
+  targetSizeToBytes,
 } from "./webp-converter.utils";
 
 // Mock Canvas API
@@ -65,6 +68,63 @@ describe("WebP Converter Utils", () => {
       expect(formatFileSize(1536)).toBe("1.5 KB");
       expect(formatFileSize(1048576)).toBe("1 MB");
       expect(formatFileSize(1073741824)).toBe("1 GB");
+    });
+  });
+
+  describe("targetSizeToBytes", () => {
+    it("should convert KB values to bytes", () => {
+      expect(targetSizeToBytes(200)).toBe(204800);
+      expect(targetSizeToBytes(1)).toBe(1024);
+      expect(targetSizeToBytes(1.5)).toBe(1536);
+    });
+
+    it("should round fractional byte values", () => {
+      expect(targetSizeToBytes(0.1)).toBe(102);
+    });
+  });
+
+  describe("calculateScaleFactor", () => {
+    it("should return 1 when the image already fits", () => {
+      expect(calculateScaleFactor(1000, 1000)).toBe(1);
+      expect(calculateScaleFactor(1000, 2000)).toBe(1);
+    });
+
+    it("should estimate scale from the pixel count ratio", () => {
+      const fourMegabytes = 4 * 1024 * 1024;
+      const oneMegabyte = 1024 * 1024;
+
+      expect(calculateScaleFactor(fourMegabytes, oneMegabyte)).toBeCloseTo(
+        0.475,
+        3
+      );
+    });
+
+    it("should clamp scale factors to a safe range", () => {
+      expect(calculateScaleFactor(10_000_000, 1)).toBe(0.25);
+      expect(calculateScaleFactor(1_010_000, 1_000_000)).toBe(0.9);
+    });
+  });
+
+  describe("scaleDimensions", () => {
+    it("should scale width and height proportionally", () => {
+      expect(scaleDimensions(1000, 500, 0.5)).toEqual({
+        width: 500,
+        height: 250,
+      });
+    });
+
+    it("should not scale beyond the original dimensions", () => {
+      expect(scaleDimensions(1000, 500, 2)).toEqual({
+        width: 1000,
+        height: 500,
+      });
+    });
+
+    it("should keep dimensions at least 16 pixels", () => {
+      expect(scaleDimensions(1000, 500, 0.0001)).toEqual({
+        width: 16,
+        height: 16,
+      });
     });
   });
 
@@ -144,7 +204,9 @@ describe("WebP Converter Utils", () => {
       };
 
       const createElementSpy = jest.spyOn(document, "createElement");
-      createElementSpy.mockReturnValue(mockLink as HTMLAnchorElement);
+      createElementSpy.mockReturnValue(
+        mockLink as unknown as HTMLAnchorElement
+      );
 
       downloadWebP(webpData, fileName);
 

@@ -7,6 +7,7 @@ import { Input } from "@/components/ds/InputComponent";
 import { Slider } from "@/components/ds/SliderComponent";
 import { Progress } from "@/components/ds/ProgressComponent";
 import { Checkbox } from "@/components/ds/CheckboxComponent";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ds/TabsComponent";
 import Header from "@/components/Header";
 import { CMDK } from "@/components/CMDK";
 import JamCallToAction from "@/components/JamCallToAction";
@@ -22,9 +23,12 @@ import {
   filterSupportedImages,
   cleanup,
   ConversionResult,
+  targetSizeToBytes,
 } from "@/components/utils/webp-converter.utils";
 
 const MAX_FILE_SIZE = 40 * 1024 * 1024; // 40MB per file
+
+type CompressionMode = "quality" | "target-size";
 
 interface FileItem {
   file: File;
@@ -34,6 +38,9 @@ interface FileItem {
 export default function WebPConverter() {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [quality, setQuality] = useState<number>(80);
+  const [compressionMode, setCompressionMode] =
+    useState<CompressionMode>("quality");
+  const [targetSize, setTargetSize] = useState<string>("200");
   const [autoDownload, setAutoDownload] = useState<boolean>(false);
   const [isConverting, setIsConverting] = useState(false);
   const [conversionResults, setConversionResults] = useState<
@@ -44,7 +51,7 @@ export default function WebPConverter() {
     total: number;
   } | null>(null);
 
-  // Load quality and auto-download from localStorage on mount
+  // Load saved settings from localStorage on mount
   useEffect(() => {
     const savedQuality = localStorage.getItem("webp-converter-quality");
     if (savedQuality) {
@@ -59,6 +66,19 @@ export default function WebPConverter() {
     );
     if (savedAutoDownload) {
       setAutoDownload(savedAutoDownload === "true");
+    }
+
+    const savedMode = localStorage.getItem("webp-converter-mode");
+    if (savedMode === "quality" || savedMode === "target-size") {
+      setCompressionMode(savedMode);
+    }
+
+    const savedTargetSize = localStorage.getItem("webp-converter-target-size");
+    if (savedTargetSize) {
+      const parsedTargetSize = parseFloat(savedTargetSize);
+      if (parsedTargetSize > 0) {
+        setTargetSize(savedTargetSize);
+      }
     }
   }, []);
 
@@ -104,8 +124,38 @@ export default function WebPConverter() {
     localStorage.setItem("webp-converter-auto-download", checked.toString());
   }, []);
 
+  const handleCompressionModeChange = useCallback((value: string) => {
+    if (value !== "quality" && value !== "target-size") return;
+    setCompressionMode(value);
+    localStorage.setItem("webp-converter-mode", value);
+  }, []);
+
+  const handleTargetSizeChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value;
+      setTargetSize(value);
+
+      const parsedValue = parseFloat(value);
+      if (parsedValue > 0) {
+        localStorage.setItem("webp-converter-target-size", value);
+      }
+    },
+    []
+  );
+
+  const targetSizeBytes = useMemo(() => {
+    const parsedTargetSize = parseFloat(targetSize);
+
+    if (!Number.isFinite(parsedTargetSize) || parsedTargetSize <= 0) {
+      return null;
+    }
+
+    return targetSizeToBytes(parsedTargetSize);
+  }, [targetSize]);
+
   const handleConvert = useCallback(async () => {
     if (files.length === 0) return;
+    if (compressionMode === "target-size" && !targetSizeBytes) return;
 
     setIsConverting(true);
     setProgress({ completed: 0, total: files.length });
@@ -114,7 +164,13 @@ export default function WebPConverter() {
     try {
       const result = await batchConvertToWebP(
         files.map((f) => f.file),
-        { quality },
+        {
+          quality,
+          targetSizeBytes:
+            compressionMode === "target-size"
+              ? (targetSizeBytes ?? undefined)
+              : undefined,
+        },
         (completed, total) => {
           setProgress({ completed, total });
         }
@@ -135,7 +191,7 @@ export default function WebPConverter() {
       setIsConverting(false);
       setProgress(null);
     }
-  }, [files, quality, autoDownload]);
+  }, [files, quality, autoDownload, compressionMode, targetSizeBytes]);
 
   const handleDownloadAll = useCallback(async () => {
     if (conversionResults.length === 0) return;
@@ -154,6 +210,9 @@ export default function WebPConverter() {
     if (conversionResults.length === 0) return null;
 
     const successful = conversionResults.filter((r) => r.success);
+    const targetedResults = successful.filter(
+      (r) => r.targetSize !== undefined
+    );
     const totalOriginal = conversionResults.reduce(
       (sum, r) => sum + r.originalSize,
       0
@@ -170,6 +229,8 @@ export default function WebPConverter() {
       totalOriginal,
       totalWebP,
       compressionRatio,
+      targetSize: targetedResults[0]?.targetSize,
+      targetsMet: targetedResults.filter((r) => r.targetMet).length,
     };
   }, [conversionResults]);
 
@@ -184,7 +245,7 @@ export default function WebPConverter() {
     <main>
       <Meta
         title="WebP Converter | Free, Open Source & Ad-free"
-        description="Convert images to WebP format with batch processing and quality control. Fast, free, open source, ad-free tools."
+        description="Convert images to WebP format with batch processing, quality control, and target file size compression. Fast, free, open source, ad-free tools."
       />
       <Header />
       <CMDK />
@@ -192,7 +253,7 @@ export default function WebPConverter() {
       <section className="container max-w-2xl mb-12">
         <PageHeader
           title="WebP Converter"
-          description="Convert images to WebP format with batch processing."
+          description="Convert images to WebP format with batch processing, or compress them to a target file size."
         />
       </section>
 
@@ -263,31 +324,76 @@ export default function WebPConverter() {
 
                 <div className="mb-6">
                   <Label className="mb-3 block text-sm font-medium">
-                    Quality: {quality}%
+                    Compression mode
                   </Label>
-                  <div className="flex items-center gap-4">
-                    <Slider
-                      value={[quality]}
-                      onValueChange={handleQualityChange}
-                      max={100}
-                      min={1}
-                      step={1}
-                      className="flex-1"
-                    />
-                    <Input
-                      type="number"
-                      min="1"
-                      max="100"
-                      value={quality}
-                      onChange={handleQualityInputChange}
-                      className="w-20"
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Lower quality = smaller file size, higher quality = better
-                    image quality
-                  </p>
+                  <Tabs
+                    value={compressionMode}
+                    onValueChange={handleCompressionModeChange}
+                  >
+                    <TabsList className="w-full">
+                      <TabsTrigger value="quality" className="flex-1">
+                        Quality
+                      </TabsTrigger>
+                      <TabsTrigger value="target-size" className="flex-1">
+                        Target file size
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
                 </div>
+
+                {compressionMode === "quality" ? (
+                  <div className="mb-6">
+                    <Label className="mb-3 block text-sm font-medium">
+                      Quality: {quality}%
+                    </Label>
+                    <div className="flex items-center gap-4">
+                      <Slider
+                        value={[quality]}
+                        onValueChange={handleQualityChange}
+                        max={100}
+                        min={1}
+                        step={1}
+                        className="flex-1"
+                      />
+                      <Input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={quality}
+                        onChange={handleQualityInputChange}
+                        className="w-20"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Lower quality = smaller file size, higher quality = better
+                      image quality
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mb-6">
+                    <Label
+                      htmlFor="target-size"
+                      className="mb-3 block text-sm font-medium"
+                    >
+                      Target file size (KB, per image)
+                    </Label>
+                    <Input
+                      id="target-size"
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      value={targetSize}
+                      onChange={handleTargetSizeChange}
+                      aria-invalid={!targetSizeBytes}
+                    />
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Images are compressed to the highest quality that fits
+                      within this size. Dimensions are reduced automatically
+                      when needed. Targets larger than an image's original size
+                      are capped so images are never enlarged.
+                    </p>
+                  </div>
+                )}
 
                 <div className="mb-6">
                   <div className="flex items-center space-x-2">
@@ -311,9 +417,17 @@ export default function WebPConverter() {
                   <Button
                     className="flex-1"
                     onClick={handleConvert}
-                    disabled={isConverting || files.length === 0}
+                    disabled={
+                      isConverting ||
+                      files.length === 0 ||
+                      (compressionMode === "target-size" && !targetSizeBytes)
+                    }
                   >
-                    {isConverting ? "Converting..." : "Convert to WebP"}
+                    {isConverting
+                      ? "Converting..."
+                      : compressionMode === "target-size"
+                        ? "Compress to target size"
+                        : "Convert to WebP"}
                   </Button>
 
                   {conversionResults.length > 0 && (
@@ -362,6 +476,42 @@ export default function WebPConverter() {
                             </span>
                           )}
                         </h3>
+
+                        {conversionStats.targetSize !== undefined && (
+                          <div className="mb-4 space-y-1 text-sm">
+                            <p className="text-muted-foreground">
+                              Target size:{" "}
+                              {formatFileSize(conversionStats.targetSize)} per
+                              image •{" "}
+                              <span
+                                className={
+                                  conversionStats.targetsMet ===
+                                  conversionStats.successful
+                                    ? "text-green-600"
+                                    : "text-amber-600"
+                                }
+                              >
+                                {conversionStats.targetsMet}/
+                                {conversionStats.successful} met
+                              </span>
+                            </p>
+                            {conversionStats.targetsMet <
+                              conversionStats.successful && (
+                              <p className="text-amber-600">
+                                {conversionStats.successful -
+                                  conversionStats.targetsMet}{" "}
+                                {conversionStats.successful -
+                                  conversionStats.targetsMet ===
+                                1
+                                  ? "image"
+                                  : "images"}{" "}
+                                could not be compressed below the target even at
+                                the minimum dimensions. The smallest possible
+                                WebP is included.
+                              </p>
+                            )}
+                          </div>
+                        )}
 
                         {/* Results Section - Full Width */}
                         <div className="border border-border rounded-lg p-6 bg-card">

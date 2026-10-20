@@ -7,7 +7,8 @@ export default function WebPConverterSEO() {
         <p>
           Convert images to WebP format with our free online converter. Reduce
           file sizes while maintaining image quality using WebP's advanced
-          compression for faster web performance and better user experience.
+          compression for faster web performance and better user experience. You
+          can also compress images to a target file size in KB.
         </p>
       </section>
 
@@ -31,8 +32,9 @@ export default function WebPConverterSEO() {
             click to select them.
           </li>
           <li>
-            <b>Adjust quality:</b> <br /> Use the quality slider to balance file
-            size and image quality (1-100%).
+            <b>Choose a compression mode:</b> <br /> Use the quality slider to
+            balance file size and image quality (1-100%), or enter a target file
+            size in KB.
           </li>
           <li>
             <b>Convert & download:</b> <br /> Convert all images at once and
@@ -118,6 +120,13 @@ export default function WebPConverterSEO() {
             <b>What quality setting should I use?</b> <br /> For web use, 80-90%
             quality provides excellent results with significant file size
             reduction. Lower values create smaller files with some quality loss.
+          </li>
+          <li>
+            <b>Can I compress an image to a specific file size?</b> <br /> Yes.
+            Switch to the target file size mode and enter the size you need in
+            KB. The converter automatically finds the highest quality that fits,
+            reducing the image dimensions when necessary. Targets larger than
+            the original image are capped so the image is never enlarged.
           </li>
           <li>
             <b>Can I convert multiple images at once?</b> <br /> Yes, our tool

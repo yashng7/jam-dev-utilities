@@ -170,7 +170,7 @@ export const tools = [
   {
     title: "WebP Converter",
     description:
-      "Convert images to WebP format with batch processing and quality control. Reduce file sizes while maintaining image quality.",
+      "Convert images to WebP format with batch processing, quality control, or a target file size in KB. Reduce file sizes while maintaining image quality.",
     link: "/utilities/webp-converter",
   },
   {
